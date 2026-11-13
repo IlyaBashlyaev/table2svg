@@ -32,7 +32,9 @@ _MAX_FONT_SIZE = 199
 _DEFAULT_FONT_COLOR = '#000000'
 _DEFAULT_BACKGROUND_COLOR = '#ffffff'
 _MARGIN = 30
-_PADDING = 5
+_DEFAULT_PADDING = 5
+_MIN_PADDING = 0
+_MAX_PADDING = 99
 _CHAR_WIDTH_RATIO = 0.6
 _BOLD_CHAR_WIDTH_RATIO = 0.66
 
@@ -62,7 +64,7 @@ def _clamp(n, min_number, max_number):
     return max(min(max_number, n), min_number)
 
 
-def _min_cell_width(text, font_size, bold):
+def _min_cell_width(text, font_size, bold, padding):
     """Estimates the narrowest cell width that fits the text.
 
     SVG has no text measuring, so the width is approximated from the font size.
@@ -72,7 +74,7 @@ def _min_cell_width(text, font_size, bold):
         font_size if unicodedata.east_asian_width(c) in 'WF'
         else font_size * ratio
         for c in text)
-    return math.ceil(text_width) + 2 * _PADDING if text else 0
+    return math.ceil(text_width) + 2 * padding if text else 0
 
 
 def render(csv_path, svg_path,
@@ -81,7 +83,9 @@ def render(csv_path, svg_path,
            line_width=_DEFAULT_LINE_WIDTH, line_color=_DEFAULT_LINE_COLOR,
            font=_DEFAULT_FONT, font_size=_DEFAULT_FONT_SIZE,
            font_color=_DEFAULT_FONT_COLOR, text_align=_TextAlign.CENTER,
-           background_color=_DEFAULT_BACKGROUND_COLOR, borders=_Borders.ALL):
+           background_color=_DEFAULT_BACKGROUND_COLOR, borders=_Borders.ALL,
+           padding=_DEFAULT_PADDING):
+    padding = _clamp(padding, _MIN_PADDING, _MAX_PADDING)
     row_height = _clamp(row_height, _MIN_ROW_HEIGHT, _MAX_ROW_HEIGHT)
     line_width = _clamp(line_width, _MIN_LINE_WIDTH, _MAX_LINE_WIDTH)
     font_size = _clamp(font_size, _MIN_FONT_SIZE, _MAX_FONT_SIZE)
@@ -116,7 +120,7 @@ def render(csv_path, svg_path,
         for i, row in enumerate(data):
             for j, text in enumerate(row[:cols]):
                 bold = (i == 0 and header_row) or (j == 0 and first_column)
-                needed = _min_cell_width(text, font_size, bold)
+                needed = _min_cell_width(text, font_size, bold, padding)
                 if needed > column_widths[j]:
                     _info(f'Widening column {j} from {column_widths[j]} '
                           f'to {needed} to fit "{text}"')
@@ -189,13 +193,13 @@ def render(csv_path, svg_path,
             height = row_height
             y = top + height // 2 - font_size // 2
             if text_align == _TextAlign.LEFT:
-                x = left + _PADDING
+                x = left + padding
                 anchor = 'start'
             elif text_align == _TextAlign.CENTER:
                 x = left + width // 2
                 anchor = 'middle'
             elif text_align == _TextAlign.RIGHT:
-                x = left + width - _PADDING
+                x = left + width - padding
                 anchor = 'end'
             if (i == 0 and header_row) or (j == 0 and first_column):
                 font_weight = "bold"
@@ -282,6 +286,10 @@ def main():
         ],
         default=_Borders.ALL.value,
         help='How to draw the table borders.')
+    parser.add_argument(
+        '-p', '--padding', type=int, default=_DEFAULT_PADDING,
+        help='The left and right padding of the cell text, in pixels. '
+             'It also counts when a column is widened to fit its text.')
     args = parser.parse_args()
     global _verbose
     _verbose = args.verbose
@@ -291,7 +299,8 @@ def main():
            args.line_width, args.line_color,
            args.font, args.font_size,
            args.font_color, _TextAlign(args.text_align),
-           args.background_color, _Borders(args.borders))
+           args.background_color, _Borders(args.borders),
+           args.padding)
 
 
 if __name__ == '__main__':
