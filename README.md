@@ -7,7 +7,7 @@ A command-line utility to render tabular data to an SVG table.
 Print the usage info:
 
 ```shell
-./table2svg.py -h
+./table2svg.py -h -o=[Name].svg
 ```
 
 ## Examples

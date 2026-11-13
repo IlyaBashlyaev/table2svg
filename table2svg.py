@@ -7,7 +7,9 @@ from enum import Enum
 import csv
 import argparse
 import html
+import math
 import sys
+import unicodedata
 
 
 _verbose = False
@@ -17,7 +19,6 @@ _DEFAULT_TABLE_WIDTH = 960
 _DEFAULT_ROW_HEIGHT = 40
 _MIN_ROW_HEIGHT = 1
 _MAX_ROW_HEIGHT = 999
-_DEFAULT_COL_WIDTH = 100
 _MIN_COLUMN_WIDTH = 1
 _MAX_COLUMN_WIDTH = 999
 _DEFAULT_LINE_WIDTH = 1
@@ -32,6 +33,8 @@ _DEFAULT_FONT_COLOR = '#000000'
 _DEFAULT_BACKGROUND_COLOR = '#ffffff'
 _MARGIN = 30
 _PADDING = 5
+_CHAR_WIDTH_RATIO = 0.6
+_BOLD_CHAR_WIDTH_RATIO = 0.66
 
 
 class _TextAlign(Enum):
@@ -57,6 +60,19 @@ def _info(*args, **kwargs):
 
 def _clamp(n, min_number, max_number):
     return max(min(max_number, n), min_number)
+
+
+def _min_cell_width(text, font_size, bold):
+    """Estimates the narrowest cell width that fits the text.
+
+    SVG has no text measuring, so the width is approximated from the font size.
+    """
+    ratio = _BOLD_CHAR_WIDTH_RATIO if bold else _CHAR_WIDTH_RATIO
+    text_width = sum(
+        font_size if unicodedata.east_asian_width(c) in 'WF'
+        else font_size * ratio
+        for c in text)
+    return math.ceil(text_width) + 2 * _PADDING if text else 0
 
 
 def render(csv_path, svg_path,
@@ -94,8 +110,17 @@ def render(csv_path, svg_path,
     rows = len(data)
     cols = len(data[0])
     if column_widths:
+        column_widths = list(column_widths)
         while len(column_widths) < cols:
-            column_widths.append(_DEFAULT_COL_WIDTH)
+            column_widths.append(column_widths[-1])
+        for i, row in enumerate(data):
+            for j, text in enumerate(row[:cols]):
+                bold = (i == 0 and header_row) or (j == 0 and first_column)
+                needed = _min_cell_width(text, font_size, bold)
+                if needed > column_widths[j]:
+                    _info(f'Widening column {j} from {column_widths[j]} '
+                          f'to {needed} to fit "{text}"')
+                    column_widths[j] = needed
         table_width = line_width * (cols + 1) + sum(column_widths) + _MARGIN * 2
     else:
         table_width = 960
@@ -211,7 +236,10 @@ def main():
         help='The height of the rows.')
     parser.add_argument(
         '--column_widths', type=int, nargs='*',
-        help='The list of the column widths. If the list is empty or omitted, '
+        help='The list of the column widths. If the list is shorter than the '
+             'number of columns, the last width is used for the remaining '
+             'columns. A column is widened to the minimal width that fits its '
+             'longest text. If the list is empty or omitted, '
              f'the width of the output SVG will be {_DEFAULT_TABLE_WIDTH} and '
              'all the columns will share an average width.')
     parser.add_argument(
